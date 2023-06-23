@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <title>Kiosk v3 Synacktiv</title>
+</head>
+
+<body>
+    <h1>Scan your QRCode !</h1>
+    <table>
+        <tr>
+            <td>
+                <div id="video-container">
+                    <video id="qr-video"></video>
+                </div>
+                <div style="display: none">
+                    <b>Device has camera: </b>
+                    <span id="cam-has-camera"></span>
+                    <br>    
+                    <div>
+                        <b>Preferred camera:</b>
+                        <select id="cam-list">
+                            <option value="environment" selected>Environment Facing (default)</option>
+                            <option value="user">User Facing</option>
+                        </select>
+                    </div>
+                    <b>Camera has flash: </b>
+                    <span id="cam-has-flash"></span>
+                    <div>
+                        <button id="flash-toggle">📸 Flash: <span id="flash-state">off</span></button>
+                    </div>
+    
+                </div>
+            </td>
+            <td>
+                <b>Detected QR code: </b>
+                <span id="cam-qr-result">None</span>
+                <br>
+                <b>Last detected at: </b>
+                <span id="cam-qr-result-timestamp"></span>
+                <br>
+                <div style="display: none">
+                <button id="start-button">Start</button>
+                <button id="stop-button">Stop</button>
+                </div>
+                <br />
+                <img src=Accueil-slider-1-large.gif width="300" />
+                <img src=synacktiv.png width="200" />
+
+            </td>
+        </tr>
+        <tr>
+            <td><img src=logo_synacktiv_blanc.png width="300" />
+                <td>
+            </td>
+
+        </tr>
+    </table>
+
+    <!--<script src="../qr-scanner.umd.min.js"></script>-->
+    <!-- Copyright for https://github.com/NinjaDuHack/kioskv3 -->
+    <!--<script src="../qr-scanner.legacy.min.js"></script>-->
+    <script type="module">
+        import QrScanner from "./qr-scanner-master/qr-scanner.min.js";
+
+        const video = document.getElementById('qr-video');
+        const videoContainer = document.getElementById('video-container');
+        const camHasCamera = document.getElementById('cam-has-camera');
+        const camList = document.getElementById('cam-list');
+        const camHasFlash = document.getElementById('cam-has-flash');
+        const flashToggle = document.getElementById('flash-toggle');
+        const flashState = document.getElementById('flash-state');
+        const camQrResult = document.getElementById('cam-qr-result');
+        const camQrResultTimestamp = document.getElementById('cam-qr-result-timestamp');
+        const fileSelector = document.getElementById('file-selector');
+        const fileQrResult = document.getElementById('file-qr-result');
+
+        function postResult(result) {
+            fetch('api.php', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: result.data
+            })
+                .then(response => response.json())
+                .then(response => {
+                    console.log("message: " + response["message"]);
+                    camQrResult.innerHTML = response["message"];
+                }
+                );
+            clearTimeout(camQrResult.highlightTimeout);
+            camQrResult.highlightTimeout = setTimeout(() => camQrResult.style.color = 'inherit', 100);
+
+        }
+
+        // ####### Web Cam Scanning #######
+
+        const scanner = new QrScanner(video, result => postResult(result), {
+            onDecodeError: error => {
+                camQrResult.textContent = error;
+                camQrResult.style.color = 'inherit';
+            },
+            highlightScanRegion: true,
+            highlightCodeOutline: true,
+            maxScansPerSecond: 1,
+            returnDetailedScanResult: true
+        });
+
+        const updateFlashAvailability = () => {
+            scanner.hasFlash().then(hasFlash => {
+                camHasFlash.textContent = hasFlash;
+                flashToggle.style.display = hasFlash ? 'inline-block' : 'none';
+            });
+        };
+
+        scanner.start().then(() => {
+            updateFlashAvailability();
+            // List cameras after the scanner started to avoid listCamera's stream and the scanner's stream being requested
+            // at the same time which can result in listCamera's unconstrained stream also being offered to the scanner.
+            // Note that we can also start the scanner after listCameras, we just have it this way around in the demo to
+            // start the scanner earlier.
+            QrScanner.listCameras(true).then(cameras => cameras.forEach(camera => {
+                const option = document.createElement('option');
+                option.value = camera.id;
+                option.text = camera.label;
+                camList.add(option);
+            }));
+        });
+
+        QrScanner.hasCamera().then(hasCamera => camHasCamera.textContent = hasCamera);
+
+        // for debugging
+        window.scanner = scanner;
+
+        camList.addEventListener('change', event => {
+            scanner.setCamera(event.target.value).then(updateFlashAvailability);
+        });
+
+        flashToggle.addEventListener('click', () => {
+            scanner.toggleFlash().then(() => flashState.textContent = scanner.isFlashOn() ? 'on' : 'off');
+        });
+
+        document.getElementById('start-button').addEventListener('click', () => {
+            scanner.start();
+        });
+
+        document.getElementById('stop-button').addEventListener('click', () => {
+            scanner.stop();
+        });
+
+    </script>
+
+    <style>
+        html {
+            background-image: url('/home-header-background.jpg');
+            color: white;
+        }
+
+        div {
+            margin-bottom: 16px;
+        }
+
+        td {
+            vertical-align: top;
+        }
+
+        #video-container {
+            line-height: 0;
+        }
+
+        #video-container {
+            position: relative;
+            width: max-content;
+            height: max-content;
+            overflow: hidden;
+        }
+
+        #video-container .code-outline-highlight {
+            stroke: rgba(255, 255, 255, .5) !important;
+            stroke-width: 15 !important;
+            stroke-dasharray: none !important;
+        }
+
+        #flash-toggle {
+            display: none;
+        }
+
+        hr {
+            margin-top: 32px;
+        }
+
+        input[type="file"] {
+            display: block;
+            margin-bottom: 16px;
+        }
+    </style>
+</body>
+
+</html>
